@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Soil Classification Tool — Final (Log PSD + PDF side-by-side)</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- jsPDF autotable for nice PDF table -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    :root{ --bg:#f4f8fb; --card:#fff; --accent:#0b7dda; --muted:#6b7280; }
+    body{ background:var(--bg); font-family:Inter,Arial,sans-serif; margin:18px; color:#13293d; }
+    .wrap{ max-width:1100px; margin:0 auto; background:var(--card); padding:18px; border-radius:10px; box-shadow:0 10px 30px rgba(12,40,80,0.06); }
+    .hdr{ display:flex; gap:12px; align-items:center; }
+    .logo{ width:72px; }
+    h1{ margin:0; font-size:20px; }
+    .grid{ display:grid; grid-template-columns: 1fr 420px; gap:16px; margin-top:14px; }
+    .panel{ background:#fbfdff; padding:12px; border-radius:10px; border:1px solid rgba(12,40,80,0.04); }
+    label{ display:block; margin-top:10px; color:var(--muted); font-size:13px; }
+    input[type="number"], input[type="date"], select{ width:100%; padding:9px; border-radius:8px; border:1px solid #e6eef8; margin-top:6px; font-size:14px; }
+    button{ background:var(--accent); color:#fff; padding:9px 12px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
+    button.ghost{ background:#eef6ff; color:var(--accent); border:1px solid rgba(11,125,218,0.12); }
+    #sieveTable{ width:100%; border-collapse:collapse; margin-top:10px; }
+    #sieveTable th, #sieveTable td{ text-align:left; padding:8px; border-bottom:1px solid rgba(12,40,80,0.04); }
+    canvas{ width:100% !important; height:250px !important; display:block; margin-top:8px; }
+    .small{ font-size:13px; color:var(--muted); }
+    .derived { display:grid; grid-template-columns: repeat(2,1fr); gap:8px; margin-top:10px; }
+    .stat { background:#fff; padding:8px; border-radius:8px; border:1px solid rgba(12,40,80,0.04); }
+    footer{ text-align:center; margin-top:14px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hdr">
+      <img class="logo" src="/images/final logpo ultimate.png" alt="hii stalker!">
+      <div>
+        <h1>Soil Classification Tool — Final</h1>
+        <div class="small">Log-scale PSD, A-line, USCS classification, table + side-by-side charts in PDF.</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- left -->
+      <div>
+        <div class="panel">
+          <label>Date of Experiment</label>
+          <input type="date" id="date">
+          <label>Water Content (%)</label>
+          <input type="number" id="waterContent" placeholder="e.g. 12.5">
+
+          <h3 style="margin-top:12px">Sieve Data</h3>
+          <label class="small">Select sieve and click Add — then enter % passing in the table below</label>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <select id="sieveSelect" style="flex:1; padding:9px; border-radius:8px; border:1px solid #e6eef8;">
+              <option value="20">20 mm</option>
+              <option value="10">10 mm</option>
+              <option value="4.75">4.75 mm</option>
+              <option value="2">2 mm</option>
+              <option value="1">1 mm</option>
+              <option value="0.425">0.425 mm</option>
+              <option value="0.25">0.25 mm</option>
+              <option value="0.15">0.15 mm</option>
+              <option value="0.075">0.075 mm</option>
+            </select>
+            <button onclick="addSieveInput()">Add</button>
+            <button class="ghost" onclick="clearSieveInputs()">Clear</button>
+          </div>
+
+          <!-- Table below sieve input -->
+          <table id="sieveTable">
+            <thead><tr><th>Sieve (mm)</th><th>% Passing</th><th>Action</th></tr></thead>
+            <tbody></tbody>
+          </table>
+
+          <h3 style="margin-top:12px">Effective sizes (if known)</h3>
+          <label>D60 (mm)</label><input type="number" id="d60" step="any" placeholder="e.g. 0.8">
+          <label>D30 (mm)</label><input type="number" id="d30" step="any" placeholder="e.g. 0.22">
+          <label>D10 (mm)</label><input type="number" id="d10" step="any" placeholder="e.g. 0.02">
+
+          <h3 style="margin-top:12px">Atterberg Limits</h3>
+          <label>Liquid Limit (LL) %</label><input type="number" id="ll" placeholder="e.g. 30">
+          <label>Plasticity Index (PI) %</label><input type="number" id="pl" placeholder="e.g. 10">
+
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <button onclick="generateReport()">Generate Report</button>
+            <button class="ghost" onclick="downloadPDF()">Download PDF (landscape)</button>
+          </div>
+
+          <div id="report" class="small" style="margin-top:12px; min-height:80px; background:#fff; padding:8px; border-radius:8px; border:1px solid rgba(12,40,80,0.03);">
+            Report appears here after Generate.
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <h3 style="margin:6px 0">Plasticity Chart</h3>
+          <canvas id="plasticityChart"></canvas>
+        </div>
+      </div>
+
+      <!-- right -->
+      <div>
+        <div class="panel">
+          <h3 style="margin:6px 0">Quick Summary</h3>
+          <div id="quickSummary" class="small">No data yet</div>
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <h3 style="margin:6px 0">Particle Size Distribution (PSD)</h3>
+          <canvas id="gradationChart"></canvas>
+          <div class="small" style="margin-top:8px">X-axis: log scale (sieve size mm). Y-axis: % passing.</div>
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <h3 style="margin:6px 0">Derived Values</h3>
+          <div class="derived" id="derivedGrid">
+            <div class="stat">D10: —</div>
+            <div class="stat">D30: —</div>
+            <div class="stat">D60: —</div>
+            <div class="stat">Cu: —</div>
+            <div class="stat">Cc: —</div>
+            <div class="stat">Gradation: —</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Developed by Dash&DasFusion — PDF contains table + charts side-by-side</footer>
+  </div>
+
+<script>
+/* Helpers */
+const $ = id => document.getElementById(id);
+const parseN = v => (v === '' || v === null || typeof v === 'undefined') ? NaN : Number(v);
+
+/* Sieve management */
+const sieveSet = new Set();
+
+function addSieveInput(){
+  const sel = $('sieveSelect');
+  const v = Number(sel.value);
+  if (isNaN(v) || sieveSet.has(v)) return;
+  sieveSet.add(v);
+  renderSieveTable();
+}
+
+function removeSieve(v){
+  sieveSet.delete(v);
+  renderSieveTable();
+}
+
+function clearSieveInputs(){
+  sieveSet.clear();
+  renderSieveTable();
+}
+
+/* Render table below sieve input */
+function renderSieveTable(){
+  const tbody = document.querySelector('#sieveTable tbody');
+  tbody.innerHTML = '';
+  const sizes = Array.from(sieveSet).sort((a,b)=>b-a); // descending
+  for(const s of sizes){
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = s;
+    const td2 = document.createElement('td');
+    const inp = document.createElement('input'); inp.type='number'; inp.min=0; inp.max=100; inp.style.width='100%';
+    inp.id = `sieve_${String(s).replace('.','_')}`;
+    inp.placeholder = '% passing';
+    inp.oninput = () => {/* optionally live-update */};
+    td2.appendChild(inp);
+    const td3 = document.createElement('td');
+    const btn = document.createElement('button'); btn.textContent='Remove'; btn.style.background='#ff6b6b'; btn.style.color='#fff';
+    btn.onclick = ()=> removeSieve(s);
+    td3.appendChild(btn);
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    tbody.appendChild(tr);
+  }
+  updateDerivedGrid();
+}
+
+/* USCS classification logic */
+function classifyUSCS({d60,d30,d10,LL,PI,percentFines}){
+  const out = { cu:null, cc:null, gradation:null, symbol:null, notes:[] };
+  if (!d60 || !d30 || !d10 || d60<=0 || d30<=0 || d10<=0){
+    out.notes.push('D60/D30/D10 missing or invalid — Cu/Cc cannot be computed.');
+  } else {
+    const cu = d60 / d10;
+    const cc = (d30 * d30) / (d60 * d10);
+    out.cu = Number(cu.toFixed(3)); out.cc = Number(cc.toFixed(3));
+    const isGravel = d10 >= 4.75;
+    if (isGravel) out.gradation = (cu>=4 && cc>=1 && cc<=3) ? 'Well Graded (Gravel)' : 'Poorly Graded (Gravel)';
+    else out.gradation = (cu>=6 && cc>=1 && cc<=3) ? 'Well Graded (Sand)' : 'Poorly Graded (Sand)';
+    out._isGravel = isGravel;
+  }
+
+  const fines = (typeof percentFines === 'number' && !isNaN(percentFines)) ? percentFines : 0;
+  out.percentFines = fines;
+  const piVal = (typeof PI === 'number' && !isNaN(PI)) ? PI : NaN;
+
+  if (fines < 5){
+    out.symbol = out._isGravel ? ((out.gradation && out.gradation.includes('Well')) ? 'GW' : 'GP')
+                               : ((out.gradation && out.gradation.includes('Well')) ? 'SW' : 'SP');
+  } else if (fines >=5 && fines <=12){
+    const coarse = out._isGravel ? ((out.gradation && out.gradation.includes('Well')) ? 'GW' : 'GP')
+                                 : ((out.gradation && out.gradation.includes('Well')) ? 'SW' : 'SP');
+    let fineSuffix = '';
+    if (!isNaN(piVal)){
+      fineSuffix = (piVal < 4) ? 'M' : (piVal > 7) ? 'C' : 'C/M';
+    } else fineSuffix = 'M/C';
+    out.symbol = out._isGravel ? `${coarse}-${(fineSuffix==='M'?'GM':(fineSuffix==='C'?'GC':'GM/GC'))}`
+                               : `${coarse}-${(fineSuffix==='M'?'SM':(fineSuffix==='C'?'SC':'SM/SC'))}`;
+  } else {
+    if (isNaN(piVal)){
+      out.symbol = out._isGravel ? 'GM/GC' : 'SM/SC';
+    } else {
+      if (piVal < 4) out.symbol = out._isGravel ? 'GM' : 'SM';
+      else if (piVal > 7) out.symbol = out._isGravel ? 'GC' : 'SC';
+      else out.symbol = out._isGravel ? 'GM/GC' : 'SM/SC';
+    }
+  }
+
+  return out;
+}
+
+/* A-line for plasticity chart */
+function aLinePoints(){
+  const pts=[];
+  for(let LL=0; LL<=100; LL+=1){
+    const PI = 0.73*(LL - 20);
+    if (PI>=0) pts.push({x:LL, y:PI});
+  }
+  return pts;
+}
+
+/* Chart holders */
+let plasticityChart=null, gradationChart=null;
+
+/* Update derived grid live */
+function updateDerivedGrid(){
+  const d60 = parseN($('d60').value); const d30 = parseN($('d30').value); const d10 = parseN($('d10').value);
+  const LL = parseN($('ll').value); const PI = parseN($('pl').value);
+  const sizes = Array.from(sieveSet).sort((a,b)=>b-a);
+  const sieveData = sizes.map(s=>({size:s, v: parseN($(`sieve_${String(s).replace('.','_')}`)?.value)})).filter(x=>x.v !== null);
+  let percentFines = NaN;
+  const frow = sieveData.find(r=> Math.abs(r.size - 0.075) < 1e-6);
+  if (frow) percentFines = frow.v;
+  const cls = classifyUSCS({d60,d30,d10,LL,PI,percentFines: isNaN(percentFines)?0:percentFines});
+  $('derivedGrid').innerHTML = `
+    <div class="stat">D10: ${isNaN(d10)? '—' : d10}</div>
+    <div class="stat">D30: ${isNaN(d30)? '—' : d30}</div>
+    <div class="stat">D60: ${isNaN(d60)? '—' : d60}</div>
+    <div class="stat">Cu: ${cls.cu===null? '—' : cls.cu}</div>
+    <div class="stat">Cc: ${cls.cc===null? '—' : cls.cc}</div>
+    <div class="stat">Gradation: ${cls.gradation || '—'}</div>
+  `;
+}
+
+/* Generate report, draw charts */
+function generateReport(){
+  // inputs
+  const date = $('date').value || '(not set)';
+  const water = parseN($('waterContent').value);
+  const d60 = parseN($('d60').value); const d30 = parseN($('d30').value); const d10 = parseN($('d10').value);
+  const LL = parseN($('ll').value); const PI = parseN($('pl').value);
+
+  const sizes = Array.from(sieveSet).sort((a,b)=>b-a);
+  const sieveData = [];
+  for(const s of sizes){
+    const v = parseN($(`sieve_${String(s).replace('.','_')}`)?.value);
+    if (!isNaN(v)) sieveData.push({size:s, passing:v});
+  }
+  let percentFines = NaN;
+  const frow = sieveData.find(r=> Math.abs(r.size - 0.075) < 1e-6);
+  if (frow) percentFines = frow.passing;
+
+  const cls = classifyUSCS({d60,d30,d10,LL,PI,percentFines: isNaN(percentFines)?0:percentFines});
+
+  // report text
+  const lines = [];
+  lines.push(`Date: ${date}`);
+  lines.push(`Water content: ${isNaN(water)? '—' : water + '%'}`);
+  lines.push('');
+  lines.push('Sieve Analysis (% Passing):');
+  if (sieveData.length===0) lines.push('  (no sieve data)');
+  else sieveData.forEach(r => lines.push(`  ${r.size} mm : ${r.passing}%`));
+  lines.push('');
+  lines.push('Effective sizes and coefficients:');
+  lines.push(`  D60 = ${isNaN(d60)? '—' : d60}`);
+  lines.push(`  D30 = ${isNaN(d30)? '—' : d30}`);
+  lines.push(`  D10 = ${isNaN(d10)? '—' : d10}`);
+  lines.push(`  Cu = ${cls.cu===null? '—': cls.cu}`);
+  lines.push(`  Cc = ${cls.cc===null? '—': cls.cc}`);
+  lines.push(`  Gradation = ${cls.gradation || '—'}`);
+  lines.push(`  % fines (0.075 mm) = ${isNaN(cls.percentFines)? '—': cls.percentFines + '%'}`);
+  lines.push(`  USCS Symbol = ${cls.symbol || '—'}`);
+  lines.push('');
+  lines.push('Atterberg limits:');
+  lines.push(`  LL = ${isNaN(LL)? '—' : LL}`);
+  lines.push(`  PI = ${isNaN(PI)? '—' : PI}`);
+
+  $('report').innerText = lines.join('\n');
+  $('quickSummary').innerHTML = `<div><strong>USCS:</strong> ${cls.symbol || '—'}</div><div><strong>Gradation:</strong> ${cls.gradation || '—'}</div>`;
+
+  updateDerivedGrid();
+
+  // plasticity chart
+  const pc = $('plasticityChart').getContext('2d');
+  if (plasticityChart) plasticityChart.destroy();
+  const samp = (!isNaN(LL) && !isNaN(PI)) ? [{x:LL, y:PI}] : [];
+  plasticityChart = new Chart(pc, {
+    type:'scatter',
+    data:{
+      datasets:[
+        { label:'Sample', data:samp, backgroundColor:'#0b7dda', pointRadius:6 },
+        { label:'A-line', data:aLinePoints(), type:'line', borderColor:'#d63b3b', borderWidth:1, pointRadius:0, fill:false }
+      ]
+    },
+    options:{
+      scales:{ x:{ title:{display:true,text:'LL (%)'}, min:0, max:100 }, y:{ title:{display:true,text:'PI (%)'}, min:0, max:60 } },
+      plugins:{ title:{display:true, text:'Plasticity Chart (A-line)'} }
+    }
+  });
+
+  // gradation chart (log x)
+  const gc = $('gradationChart').getContext('2d');
+  if (gradationChart) gradationChart.destroy();
+  const psd = sieveData.slice().sort((a,b)=>a.size - b.size).map(p=>({x:p.size,y:p.passing}));
+
+  if (psd.length === 0){
+    gradationChart = new Chart(gc, { type:'line', data:{datasets:[]}, options:{ plugins:{ title:{display:true, text:'PSD (no data)'} } } });
+  } else {
+    // find min >0 for log scale lower bound (can't be 0)
+    const minSize = Math.min(...psd.map(p=>p.x));
+    const minLog = Math.max(0.01, minSize * 0.5);
+    const maxSize = Math.max(...psd.map(p=>p.x));
+    gradationChart = new Chart(gc, {
+      type:'line',
+      data:{ datasets: [ { label:'% passing', data:psd, borderColor:'#16a34a', fill:false, tension:0.25, pointRadius:4 } ]},
+      options:{
+        scales:{
+          x:{
+            type:'logarithmic',
+            title:{ display:true, text:'Sieve size (mm) (log scale)' },
+            min: minLog,
+            max: maxSize * 1.2,
+            ticks: {
+              callback: function(value, index, values){
+                // show common sieve ticks nicely
+                const v = Number(value);
+                if (v >= 1) return v.toString();
+                // for small values show as 0.075 etc
+                return v;
+              }
+            }
+          },
+          y:{ title:{ display:true, text:'% Passing'}, min:0, max:100 }
+        },
+        plugins:{ title:{ display:true, text:'Particle Size Distribution (log x-axis)' } }
+      }
+    });
+  }
+}
+
+/* PDF export: landscape, table + side-by-side charts */
+async function downloadPDF(){
+  // generate first to ensure charts exist
+  generateReport();
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+  const margin = 28;
+  let y = margin;
+
+  // header + logo
+  const logoUrl = "https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/NIT_Rourkela_Logo.svg/320px-NIT_Rourkela_Logo.svg.png";
+  const logoData = await loadImg(logoUrl).catch(()=>null);
+  if (logoData) doc.addImage(logoData, 'PNG', margin, y, 60, 34);
+  doc.setFontSize(16);
+  doc.text("Soil Classification Report", margin + (logoData?70:0), y + 18);
+  y += 46;
+
+  // report text small left column
+  doc.setFontSize(10);
+  const rpt = $('report').innerText.split('\n');
+  const pageW = doc.internal.pageSize.getWidth();
+  const usableW = pageW - margin*2;
+  for(const line of rpt){
+    const wrapped = doc.splitTextToSize(line, usableW);
+    doc.text(wrapped, margin, y);
+    y += 12 * wrapped.length;
+    if (y > doc.internal.pageSize.getHeight() - 220){ doc.addPage(); y = margin; }
+  }
+
+  // table: use autotable for neat table
+  // build table rows
+  const sizes = Array.from(sieveSet).sort((a,b)=>b-a);
+  const tableBody = [];
+  for(const s of sizes){
+    const v = parseN($(`sieve_${String(s).replace('.','_')}`)?.value);
+    tableBody.push([ String(s), isNaN(v)? '—' : v + ' %' ]);
+  }
+  if (tableBody.length > 0){
+    doc.autoTable({
+      head: [['Sieve (mm)', '% Passing']],
+      body: tableBody,
+      startY: y + 6,
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      headStyles: { fillColor: [11,112,214], textColor: 255 }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  } else {
+    doc.setFontSize(10);
+    doc.text('(No sieve table data)', margin, y + 8);
+    y += 26;
+  }
+
+  // derived values
+  const d60 = parseN($('d60').value); const d30 = parseN($('d30').value); const d10 = parseN($('d10').value);
+  const frow = sizes.map(s=>({s, v:parseN($(`sieve_${String(s).replace('.','_')}`)?.value)})).find(r=> Math.abs(r.s - 0.075) < 1e-6);
+  const percentFines = (frow ? frow.v : NaN);
+  const cls = classifyUSCS({d60,d30,d10, LL: parseN($('ll').value), PI: parseN($('pl').value), percentFines: isNaN(percentFines)?0:percentFines});
+  doc.setFontSize(11);
+  doc.text('Derived values & classification:', margin, y + 8);
+  y += 22;
+  const dv = [
+    `D10: ${isNaN(d10)? '—' : d10}`,
+    `D30: ${isNaN(d30)? '—' : d30}`,
+    `D60: ${isNaN(d60)? '—' : d60}`,
+    `Cu: ${cls.cu===null? '—' : cls.cu}`,
+    `Cc: ${cls.cc===null? '—' : cls.cc}`,
+    `Gradation: ${cls.gradation || '—'}`,
+    `% fines (0.075): ${isNaN(cls.percentFines)? '—' : cls.percentFines + '%'}`,
+    `USCS symbol: ${cls.symbol || '—'}`
+  ];
+  doc.setFontSize(10);
+  for(const line of dv){
+    doc.text(line, margin, y);
+    y += 12;
+    if (y > doc.internal.pageSize.getHeight() - 200){ doc.addPage(); y = margin; }
+  }
+
+  // add charts side-by-side on a new page
+  doc.addPage();
+  const chartW = (doc.internal.pageSize.getWidth() - margin*2 - 12) / 2; // half width minus small gap
+  const chartH = 260; // px in pdf pts
+  const leftX = margin;
+  const rightX = margin + chartW + 12;
+  const topY = margin + 8;
+
+  // ensure canvases are up-to-date
+  await new Promise(res => setTimeout(res, 200)); // tiny wait ensure redraw
+
+  // plasticity canvas
+  const plasticCanvas = $('plasticityChart');
+  const gradCanvas = $('gradationChart');
+
+  if (plasticCanvas){
+    const pData = plasticCanvas.toDataURL('image/png', 1.0);
+    // compute image dims preserving aspect ratio
+    doc.addImage(pData, 'PNG', leftX, topY, chartW, chartH);
+  }
+  if (gradCanvas){
+    const gData = gradCanvas.toDataURL('image/png', 1.0);
+    doc.addImage(gData, 'PNG', rightX, topY, chartW, chartH);
+  }
+
+  // finalize
+  doc.save('Soil_Classification_Report.pdf');
+
+  // helper to load remote image as dataURL
+  function loadImg(url){
+    return new Promise((resolve,reject)=>{
+      const img = new Image(); img.crossOrigin='anonymous';
+      img.onload = function(){
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        c.getContext('2d').drawImage(img,0,0);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.onerror = reject; img.src = url;
+    });
+  }
+}
+
+/* init demo seeds (optional) */
+(function seed(){
+  const def = [20,10,4.75,2,0.425,0.075];
+  def.forEach(v => { $('sieveSelect').value = v; addSieveInput(); });
+  setTimeout(()=> {
+    try{
+      $('sieve_20').value = 100;
+      $('sieve_10').value = 96;
+      $('sieve_4_75').value = 86;
+      $('sieve_2').value = 72;
+      $('sieve_0_425').value = 34;
+      $('sieve_0_075').value = 10;
+      $('d60').value = 0.8; $('d30').value = 0.22; $('d10').value = 0.02;
+      $('ll').value = 30; $('pl').value = 10;
+    }catch(e){}
+  },120);
+})();
+
+</script>
+</body>
+</html>
