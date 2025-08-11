@@ -1,7 +1,7 @@
-<img width="500" height="500" alt="final logpo ultimate" src="https://github.com/user-attachments/assets/c0d8aca0-2331-44ab-90ef-bbadc6696843" /><!DOCTYPE html>
+<img width="50" height="50" alt="final logpo ultimate" src="https://github.com/user-attachments/assets/c0d8aca0-2331-44ab-90ef-bbadc6696843" /><!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />![Uploading final [Uploading index.html.html…]()logpo ultimate.png…]()
+  <meta charset="utf-8" />
 
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Soil Classification Tool — Final (Log PSD + PDF side-by-side)</title>
